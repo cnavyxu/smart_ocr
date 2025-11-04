@@ -2,9 +2,19 @@ from __future__ import annotations
 
 """OCR服务的所有请求与响应数据模型定义。"""
 
-from typing import List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
+
+
+class TaskStatus(str, Enum):
+    """任务执行状态枚举。"""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class OCRRequest(BaseModel):
@@ -92,6 +102,9 @@ class OCRResponse(BaseModel):
     page_count: Optional[int] = Field(
         default=None, description="对于PDF文件，表示总页数"
     )
+    task_id: Optional[str] = Field(
+        default=None, description="任务唯一标识符，用于查询处理进度"
+    )
 
 
 class HealthResponse(BaseModel):
@@ -103,3 +116,36 @@ class HealthResponse(BaseModel):
     status: str = Field(description="服务运行状态标识，如 'healthy' 或 'unhealthy'")
     version: str = Field(description="当前运行的服务版本号")
     gpu_count: int = Field(description="系统配置使用的GPU设备数量")
+
+
+class TaskProgressResponse(BaseModel):
+    """任务进度查询的响应模型。"""
+
+    task_id: str = Field(description="任务唯一标识符")
+    status: TaskStatus = Field(description="任务当前状态")
+    progress: float = Field(description="任务完成进度百分比 (0-100)")
+    total_pages: int = Field(description="总页数")
+    processed_pages: int = Field(description="已处理页数")
+    start_time: float = Field(description="任务开始时间戳")
+    end_time: Optional[float] = Field(default=None, description="任务结束时间戳")
+    elapsed_time: float = Field(description="任务已经运行的时间（秒）")
+    result: Optional[Dict[str, Any]] = Field(default=None, description="任务完成后的结果")
+    error: Optional[str] = Field(default=None, description="任务失败时的错误信息")
+
+
+class TaskStatisticsResponse(BaseModel):
+    """任务统计信息响应模型。"""
+
+    total_tasks: int = Field(description="总任务数")
+    pending: int = Field(description="等待中的任务数")
+    processing: int = Field(description="处理中的任务数")
+    completed: int = Field(description="已完成的任务数")
+    failed: int = Field(description="失败的任务数")
+    success_rate: float = Field(description="任务成功率百分比")
+
+
+class TaskListResponse(BaseModel):
+    """任务列表响应模型。"""
+
+    tasks: List[TaskProgressResponse] = Field(description="任务信息列表")
+    count: int = Field(description="返回的任务数量")
