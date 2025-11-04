@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  smart_ocr:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - SMART_OCR_GPU_DEVICE_IDS=0,1,2
+      - SMART_OCR_USE_GPU=true
+      - SMART_OCR_MAX_QUEUE_SIZE=100000
+      - SMART_OCR_MAX_WORKERS=32
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 3
+              capabilities: [gpu]
+    restart: unless-stopped
