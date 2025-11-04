@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""FastAPI应用的核心定义，包括所有HTTP端点和中间件配置。"""
+
 import logging
 
 from fastapi import FastAPI, HTTPException, status
@@ -23,7 +25,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="Smart OCR Service",
-    description="High-concurrency OCR service powered by PaddleOCR",
+    description="高并发OCR识别服务，由PaddleOCR驱动，支持图像和PDF文件识别",
     version=__version__,
 )
 
@@ -40,21 +42,38 @@ orchestrator = OCROrchestrator(settings)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on application startup."""
-    logger.info("Starting Smart OCR Service")
+    """应用启动时的初始化回调函数。
+
+    在服务启动时执行必要的初始化操作，包括：
+    - 初始化OCR编排器
+    - 预加载模型到各个GPU设备
+    """
+    logger.info("正在启动 Smart OCR 服务")
     await orchestrator.start()
+    logger.info("Smart OCR 服务启动完成")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup resources on application shutdown."""
-    logger.info("Shutting down Smart OCR Service")
+    """应用关闭时的清理回调函数。
+
+    在服务停止时释放所有占用的资源，包括：
+    - 停止OCR编排器
+    - 关闭GPU工作进程
+    - 清理临时资源
+    """
+    logger.info("正在关闭 Smart OCR 服务")
     await orchestrator.stop()
+    logger.info("Smart OCR 服务已关闭")
 
 
 @app.get("/", response_model=HealthResponse)
 async def root():
-    """Root endpoint with service information."""
+    """根路径端点，返回服务的基本信息。
+
+    返回:
+        包含服务状态、版本号和GPU数量的健康响应对象
+    """
     return HealthResponse(
         status="healthy",
         version=__version__,
@@ -64,7 +83,11 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint."""
+    """健康检查端点，供监控系统调用以确认服务运行正常。
+
+    返回:
+        包含服务状态、版本号和GPU数量的健康响应对象
+    """
     return HealthResponse(
         status="healthy",
         version=__version__,
@@ -74,37 +97,57 @@ async def health_check():
 
 @app.post(f"{settings.api_prefix}/ocr", response_model=OCRResponse)
 async def perform_ocr(request: OCRRequest):
-    """
-    Perform OCR on the provided image.
+    """执行OCR识别任务的核心端点。
 
-    Args:
-        request: OCR request containing image URL or base64 data
+    该接口支持以下输入方式：
+    1. 通过URL提供图像文件 (image_url)
+    2. 通过Base64编码提供图像数据 (image_base64)
+    3. 通过URL提供PDF文件 (pdf_url)
+    4. 通过Base64编码提供PDF数据 (pdf_base64)
 
-    Returns:
-        OCR results with detected text and confidence scores
+    对于PDF文件，系统会自动将每一页转换为图像并逐页进行OCR识别，
+    最终返回所有页面的识别结果。
+
+    参数:
+        request: OCR请求对象，包含待识别的文件数据
+
+    返回:
+        OCR识别结果，包含所有检测到的文本、位置信息和性能指标
+
+    异常:
+        HTTPException(400): 当输入数据无效或文件处理失败时
+        HTTPException(500): 当服务内部出现未预期的错误时
     """
     try:
         result = await orchestrator.process_request(request)
         return result
     except ImageProcessingError as exc:
-        logger.error(f"Image processing error: {exc}")
+        logger.error(f"文件处理错误: {exc}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
     except Exception as exc:
-        logger.exception("Unexpected error during OCR processing")
+        logger.exception("OCR处理过程中发生意外错误")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during OCR processing",
+            detail="OCR处理过程中发生内部服务器错误",
         )
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Global exception handler for unhandled errors."""
-    logger.exception("Unhandled exception")
+    """全局异常处理器，捕获所有未被明确处理的异常。
+
+    参数:
+        request: 触发异常的HTTP请求对象
+        exc: 捕获到的异常实例
+
+    返回:
+        标准化的JSON错误响应
+    """
+    logger.exception("捕获到未处理的异常")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"},
+        content={"detail": "内部服务器错误"},
     )

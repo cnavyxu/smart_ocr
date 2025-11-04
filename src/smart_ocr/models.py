@@ -1,61 +1,105 @@
 from __future__ import annotations
 
+"""OCR服务的所有请求与响应数据模型定义。"""
+
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, validator
 
 
 class OCRRequest(BaseModel):
-    """Request model for OCR endpoint."""
+    """OCR接口的请求数据模型。
+
+    客户端可以通过三种方式提交待识别内容：
+    1. 提供图像URL地址（image_url）
+    2. 提供Base64编码的图像数据（image_base64）
+    3. 提供PDF文件URL地址（pdf_url）或Base64编码的PDF数据（pdf_base64）
+
+    注意：以上参数至少提供一项，否则请求会被拒绝。
+    """
 
     image_url: Optional[str] = Field(
-        default=None, description="URL of the image to process"
+        default=None, description="待处理的图像文件URL地址"
     )
     image_base64: Optional[str] = Field(
-        default=None, description="Base64 encoded image data"
+        default=None, description="经过Base64编码后的图像二进制数据"
+    )
+    pdf_url: Optional[str] = Field(default=None, description="待处理的PDF文件URL地址")
+    pdf_base64: Optional[str] = Field(
+        default=None, description="经过Base64编码后的PDF二进制数据"
     )
 
-    @validator("image_base64", "image_url", pre=True, always=True)
-    def validate_inputs(cls, v, values, **kwargs):
-        field = kwargs.get("field")
-        if field and field.name == "image_url":
-            base64_value = values.get("image_base64")
-            if not v and not base64_value:
-                raise ValueError("Either image_url or image_base64 must be provided")
-        return v
+    @validator("image_url", "image_base64", "pdf_url", "pdf_base64", pre=True, always=True)
+    def _sanitize_empty_strings(cls, value: Optional[str]) -> Optional[str]:
+        """将空字符串统一转换为None，避免误判。"""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @validator("pdf_base64", always=True)
+    def _ensure_payload_provided(cls, value, values):
+        """确保至少提供一种有效的输入数据来源。"""
+
+        candidates = [
+            values.get("image_url"),
+            values.get("image_base64"),
+            values.get("pdf_url"),
+            value,
+        ]
+        if not any(candidates):
+            raise ValueError(
+                "必须提供以下参数之一: image_url, image_base64, pdf_url, pdf_base64"
+            )
+        return value
 
 
 class TextPosition(BaseModel):
-    """Position coordinates of detected text."""
+    """检测到的文本区域的边界框坐标。
 
-    top_left: List[float]
-    top_right: List[float]
-    bottom_right: List[float]
-    bottom_left: List[float]
+    采用四个顶点的方式表示文本区域在原始图像中的位置，
+    坐标系从图像左上角开始，单位为像素。
+    """
+
+    top_left: List[float] = Field(description="左上角顶点坐标 [x, y]")
+    top_right: List[float] = Field(description="右上角顶点坐标 [x, y]")
+    bottom_right: List[float] = Field(description="右下角顶点坐标 [x, y]")
+    bottom_left: List[float] = Field(description="左下角顶点坐标 [x, y]")
 
 
 class OCRTextResult(BaseModel):
-    """Result for a single detected text region."""
+    """单个文本区域的识别结果。
 
-    text: str = Field(description="Recognized text content")
-    confidence: float = Field(description="Recognition confidence score")
-    position: TextPosition = Field(description="Text bounding box coordinates")
+    包含识别出的文本内容、可信度分数以及该文本在图像中的位置信息。
+    """
+
+    text: str = Field(description="识别出的文本内容")
+    confidence: float = Field(description="识别结果的置信度分数 (0-1)")
+    position: TextPosition = Field(description="文本区域的四角坐标")
+    page: Optional[int] = Field(default=None, description="对于PDF文件，表示文本所在的页码（从1开始）")
 
 
 class OCRResponse(BaseModel):
-    """Response model for OCR endpoint."""
+    """OCR接口的响应数据模型。
 
-    results: List[OCRTextResult] = Field(
-        description="List of recognized text regions"
+    包含所有识别结果、统计信息和性能指标。
+    """
+
+    results: List[OCRTextResult] = Field(description="所有检测到的文本区域列表")
+    text_count: int = Field(description="识别到的文本区域总数")
+    processing_time: float = Field(description="OCR推理所消耗的时间（秒）")
+    duration_ms: float = Field(description="整个请求的端到端处理时长（毫秒）")
+    page_count: Optional[int] = Field(
+        default=None, description="对于PDF文件，表示总页数"
     )
-    text_count: int = Field(description="Number of text regions found")
-    processing_time: float = Field(description="Processing time in seconds")
-    duration_ms: float = Field(description="Total request duration in milliseconds")
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
+    """健康检查接口的响应模型。
 
-    status: str
-    version: str
-    gpu_count: int
+    用于监控服务运行状态、版本信息和可用资源情况。
+    """
+
+    status: str = Field(description="服务运行状态标识，如 'healthy' 或 'unhealthy'")
+    version: str = Field(description="当前运行的服务版本号")
+    gpu_count: int = Field(description="系统配置使用的GPU设备数量")
