@@ -9,7 +9,7 @@
 - 🔄 基于 PaddleOCR 的高精度文字识别
 - ⚡ FastAPI 构建的异步高性能 API
 - 🐳 Docker 部署支持
-- 📊 支持图片 URL 和 Base64 两种输入方式
+- 📊 支持图片 / PDF 的 URL 与 Base64 双模式输入
 
 ## 技术栈
 
@@ -86,7 +86,7 @@ curl -X POST "http://localhost:8000/v1/ocr" \
   }'
 ```
 
-### OCR 识别 (使用 Base64)
+### OCR 识别 (使用 Base64 图像)
 
 ```bash
 curl -X POST "http://localhost:8000/v1/ocr" \
@@ -96,7 +96,27 @@ curl -X POST "http://localhost:8000/v1/ocr" \
   }'
 ```
 
-### 响应格式
+### OCR 识别 (使用 PDF URL)
+
+```bash
+curl -X POST "http://localhost:8000/v1/ocr" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pdf_url": "https://example.com/document.pdf"
+  }'
+```
+
+### OCR 识别 (使用 Base64 PDF)
+
+```bash
+curl -X POST "http://localhost:8000/v1/ocr" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pdf_base64": "JVBERi0xLjQKJeLjz9MKMy..."
+  }'
+```
+
+### 响应格式 (图像)
 
 ```json
 {
@@ -114,7 +134,43 @@ curl -X POST "http://localhost:8000/v1/ocr" \
   ],
   "text_count": 1,
   "processing_time": 0.123,
-  "duration_ms": 145.67
+  "duration_ms": 145.67,
+  "page_count": 1
+}
+```
+
+### 响应格式 (PDF)
+
+```json
+{
+  "results": [
+    {
+      "text": "第一页的文字",
+      "confidence": 0.98,
+      "position": {
+        "top_left": [10, 20],
+        "top_right": [100, 20],
+        "bottom_right": [100, 50],
+        "bottom_left": [10, 50]
+      },
+      "page": 1
+    },
+    {
+      "text": "第二页的文字",
+      "confidence": 0.95,
+      "position": {
+        "top_left": [15, 25],
+        "top_right": [110, 25],
+        "bottom_right": [110, 55],
+        "bottom_left": [15, 55]
+      },
+      "page": 2
+    }
+  ],
+  "text_count": 2,
+  "processing_time": 0.456,
+  "duration_ms": 523.45,
+  "page_count": 2
 }
 ```
 
@@ -127,8 +183,9 @@ curl -X POST "http://localhost:8000/v1/ocr" \
 | SMART_OCR_PADDLE_LANG | ch | OCR 语言 (ch/en) |
 | SMART_OCR_MAX_QUEUE_SIZE | 100000 | 最大队列大小 |
 | SMART_OCR_MAX_WORKERS | 32 | 最大工作线程数 |
-| SMART_OCR_FETCH_TIMEOUT_SECONDS | 10.0 | 图片下载超时 |
+| SMART_OCR_FETCH_TIMEOUT_SECONDS | 10.0 | 图片/PDF 下载超时 |
 | SMART_OCR_REQUEST_TIMEOUT_SECONDS | 25.0 | 请求处理超时 |
+| SMART_OCR_PDF_RENDER_DPI | 220 | PDF 渲染为图像时的DPI值 |
 
 ## 项目结构
 
@@ -143,7 +200,7 @@ smart_ocr/
 │       ├── ocr_service.py       # OCR 服务封装
 │       ├── gpu_manager.py       # GPU 负载均衡
 │       ├── orchestrator.py      # 请求协调器
-│       └── image_loader.py      # 图片加载工具
+│       └── image_loader.py      # 图片/PDF 加载工具
 ├── main.py                      # 入口文件
 ├── requirements.txt             # Python 依赖
 ├── Dockerfile                   # Docker 构建文件
@@ -188,6 +245,10 @@ A: 设置 `SMART_OCR_USE_GPU=false`，服务将使用 CPU 模式。
 ### Q: 如何提高并发处理能力?
 
 A: 调整 `SMART_OCR_MAX_QUEUE_SIZE` 和 `SMART_OCR_MAX_WORKERS` 参数。
+
+### Q: PDF识别效果不理想怎么办?
+
+A: 可以通过调整 `SMART_OCR_PDF_RENDER_DPI` 参数来提高PDF渲染质量（推荐范围：150-300），数值越高图像质量越好但处理时间越长。
 
 ## 许可证
 
