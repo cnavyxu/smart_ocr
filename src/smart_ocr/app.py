@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from smart_ocr import __version__
 from smart_ocr.config import get_settings
 from smart_ocr.image_loader import ImageProcessingError
-from smart_ocr.models import HealthResponse, OCRRequest, OCRResponse
+from smart_ocr.models import (
+    HealthResponse,
+    OCRRequest,
+    OCRResponse,
+    TaskListResponse,
+    TaskProgressResponse,
+    TaskStatisticsResponse,
+    TaskStatus,
+)
 from smart_ocr.orchestrator import OCROrchestrator
 
 logging.basicConfig(
@@ -96,7 +104,7 @@ async def health_check():
 
 
 @app.post(f"{settings.api_prefix}/ocr", response_model=OCRResponse)
-async def perform_ocr(request: OCRRequest):
+async def perform_ocr(request: OCRRequest, track_progress: bool = True):
     """执行OCR识别任务的核心端点。
 
     该接口支持以下输入方式：
@@ -110,6 +118,7 @@ async def perform_ocr(request: OCRRequest):
 
     参数:
         request: OCR请求对象，包含待识别的文件数据
+        track_progress: 是否启用任务进度跟踪（默认为True）
 
     返回:
         OCR识别结果，包含所有检测到的文本、位置信息和性能指标
@@ -119,7 +128,7 @@ async def perform_ocr(request: OCRRequest):
         HTTPException(500): 当服务内部出现未预期的错误时
     """
     try:
-        result = await orchestrator.process_request(request)
+        result = await orchestrator.process_request(request, track_progress=track_progress)
         return result
     except ImageProcessingError as exc:
         logger.error(f"文件处理错误: {exc}")
@@ -133,6 +142,60 @@ async def perform_ocr(request: OCRRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="OCR处理过程中发生内部服务器错误",
         )
+
+
+@app.get(f"{settings.api_prefix}/tasks/{{task_id}}", response_model=TaskProgressResponse)
+async def get_task_progress(task_id: str):
+    """查询指定任务的执行进度。
+
+    参数:
+        task_id: 任务唯一标识符
+
+    返回:
+        包含任务进度和状态的详细信息
+
+    异常:
+        HTTPException(404): 当指定的任务不存在时
+    """
+    task_info = await orchestrator.get_task_status(task_id)
+    if task_info is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务 {task_id} 不存在",
+        )
+    return TaskProgressResponse(**task_info)
+
+
+@app.get(f"{settings.api_prefix}/tasks", response_model=TaskListResponse)
+async def list_tasks(
+    status_filter: TaskStatus | None = Query(
+        default=None, description="按状态过滤任务"
+    ),
+    limit: int = Query(default=100, ge=1, le=1000, description="返回的最大任务数量"),
+):
+    """获取任务列表。
+
+    参数:
+        status_filter: 可选的状态过滤条件
+        limit: 返回的最大任务数量（1-1000）
+
+    返回:
+        任务信息列表
+    """
+    tasks_raw = await orchestrator.list_tasks(status_filter=status_filter, limit=limit)
+    tasks = [TaskProgressResponse(**item) for item in tasks_raw]
+    return TaskListResponse(tasks=tasks, count=len(tasks))
+
+
+@app.get(f"{settings.api_prefix}/tasks/statistics", response_model=TaskStatisticsResponse)
+async def get_task_statistics():
+    """获取任务执行的统计信息。
+
+    返回:
+        包含各状态任务数量和成功率的统计数据
+    """
+    stats = await orchestrator.get_task_statistics()
+    return TaskStatisticsResponse(**stats)
 
 
 @app.exception_handler(Exception)

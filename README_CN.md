@@ -10,6 +10,8 @@
 - ⚡ FastAPI 构建的异步高性能 API
 - 🐳 Docker 部署支持
 - 📊 支持图片 / PDF 的 URL 与 Base64 双模式输入
+- 📈 提供任务进度跟踪与统计接口
+- 🔬 附带 10 万并发压力测试脚本
 
 ## 技术栈
 
@@ -76,10 +78,10 @@ curl http://localhost:8000/health
 }
 ```
 
-### OCR 识别 (使用图片 URL)
+### OCR 识别 (使用图片 URL，启用进度跟踪)
 
 ```bash
-curl -X POST "http://localhost:8000/v1/ocr" \
+curl -X POST "http://localhost:8000/v1/ocr?track_progress=true" \
   -H "Content-Type: application/json" \
   -d '{
     "image_url": "https://example.com/image.jpg"
@@ -135,7 +137,8 @@ curl -X POST "http://localhost:8000/v1/ocr" \
   "text_count": 1,
   "processing_time": 0.123,
   "duration_ms": 145.67,
-  "page_count": 1
+  "page_count": 1,
+  "task_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -170,8 +173,33 @@ curl -X POST "http://localhost:8000/v1/ocr" \
   "text_count": 2,
   "processing_time": 0.456,
   "duration_ms": 523.45,
-  "page_count": 2
+  "page_count": 2,
+  "task_id": "550e8400-e29b-41d4-a716-446655440000"
 }
+```
+
+### 查询任务进度
+
+```bash
+curl "http://localhost:8000/v1/tasks/{task_id}"
+```
+
+### 获取任务列表
+
+```bash
+curl "http://localhost:8000/v1/tasks?limit=10"
+```
+
+### 获取任务统计信息
+
+```bash
+curl "http://localhost:8000/v1/tasks/statistics"
+```
+
+### 运行10万并发压力测试
+
+```bash
+python load_test_100k.py
 ```
 
 ## 环境变量配置
@@ -200,8 +228,11 @@ smart_ocr/
 │       ├── ocr_service.py       # OCR 服务封装
 │       ├── gpu_manager.py       # GPU 负载均衡
 │       ├── orchestrator.py      # 请求协调器
+│       ├── task_tracker.py      # 任务进度跟踪
 │       └── image_loader.py      # 图片/PDF 加载工具
 ├── main.py                      # 入口文件
+├── test_progress.py             # 进度跟踪测试脚本
+├── load_test_100k.py            # 10万并发负载测试脚本
 ├── requirements.txt             # Python 依赖
 ├── Dockerfile                   # Docker 构建文件
 ├── docker-compose.yml           # Docker Compose 配置
