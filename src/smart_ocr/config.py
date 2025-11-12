@@ -43,6 +43,58 @@ class Settings(BaseSettings):
         default=220,
         description="将PDF页面渲染为图像时使用的DPI分辨率",
     )
+    
+    # 票据检测配置 - OCR文本检测器
+    ticket_min_text_boxes: int = Field(
+        default=3,
+        description="票据区域最小文本框数量阈值",
+    )
+    ticket_min_area: int = Field(
+        default=10000,
+        description="票据区域最小面积阈值（像素）",
+    )
+    ticket_cluster_eps: float = Field(
+        default=50.0,
+        description="DBSCAN聚类的邻域半径（像素）",
+    )
+    ticket_cluster_min_samples: int = Field(
+        default=2,
+        description="DBSCAN聚类的最小样本数",
+    )
+    
+    # 票据检测配置 - 轮廓检测器
+    contour_min_area: int = Field(
+        default=5000,
+        description="轮廓最小面积阈值（像素）",
+    )
+    contour_max_area_ratio: float = Field(
+        default=0.9,
+        description="轮廓最大面积占图像面积的比例",
+    )
+    contour_min_aspect_ratio: float = Field(
+        default=0.3,
+        description="轮廓最小长宽比",
+    )
+    contour_max_aspect_ratio: float = Field(
+        default=3.0,
+        description="轮廓最大长宽比",
+    )
+    canny_threshold1: int = Field(
+        default=50,
+        description="Canny边缘检测的低阈值",
+    )
+    canny_threshold2: int = Field(
+        default=150,
+        description="Canny边缘检测的高阈值",
+    )
+    blur_kernel_size: int = Field(
+        default=5,
+        description="高斯模糊核大小",
+    )
+    morph_kernel_size: int = Field(
+        default=5,
+        description="形态学操作核大小",
+    )
 
     class Config:
         """Pydantic配置项，指定环境变量前缀与匹配规则。"""
